@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum ProjectStage {
+  INITIATION
+  ASSESSMENT
+  LICENSING
+  CONSTRUCTION
+  OPERATIONS
+  DECOMMISSIONING
+}
+
+enum DocumentType {
+  PDF
+  DOCX
+  WEB
+  TXT
+  OTHER
+}
+
+enum DocumentStatus {
+  UPLOADED
+  INDEXING
+  INDEXED
+  FAILED
+  ARCHIVED
+}
+
+enum ComplianceRunStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+  TEAM
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+model Organization {
+  id            String         @id @default(cuid())
+  slug          String         @unique
+  name          String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  users         User[]
+  projects      Project[]
+  subscriptions Subscription[]
+}
+
+model User {
+  id        String        @id @default(cuid())
+  email     String        @unique
+  name      String
+  role      UserRole      @default(USER)
+  orgId     String?
+  org       Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  auditLogs AuditLog[]
+
+  @@index([orgId])
+}
+
+model Project {
+  id             String          @id @default(cuid())
+  orgId          String
+  org            Organization    @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  name           String
+  jurisdiction   String
+  facilityType   String
+  stage          ProjectStage    @default(INITIATION)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  documents      Document[]
+  complianceRuns ComplianceRun[]
+  chatSessions   ChatSession[]
+
+  @@index([orgId, createdAt(sort: Desc)])
+}
+
+model Document {
+  id             String          @id @default(cuid())
+  projectId      String
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name           String
+  type           DocumentType
+  size           Int
+  status         DocumentStatus  @default(UPLOADED)
+  difyDocumentId String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  complianceRuns ComplianceRun[]
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([difyDocumentId])
+}
+
+model ComplianceRun {
+  id          String              @id @default(cuid())
+  projectId   String
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  documentId  String
+  document    Document            @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  framework   String
+  status      ComplianceRunStatus @default(PENDING)
+  startedAt   DateTime            @default(now())
+  finishedAt  DateTime?
+  resultJson  Json?
+  summaryText String?
+  createdAt   DateTime            @default(now())
+
+  @@index([projectId, startedAt(sort: Desc)])
+  @@index([documentId])
+}
+
+model ChatSession {
+  id        String        @id @default(cuid())
+  projectId String?
+  project   Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdAt DateTime      @default(now())
+  messages  ChatMessage[]
+
+  @@index([projectId, createdAt(sort: Desc)])
+}
+
+model ChatMessage {
+  id            String      @id @default(cuid())
+  sessionId     String
+  session       ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role          ChatRole
+  content       String
+  citationsJson Json?
+  createdAt     DateTime    @default(now())
+
+  @@index([sessionId, createdAt(sort: Desc)])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  requestId  String
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  targetType String
+  targetId   String?
+  metaJson   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([requestId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([targetType, targetId])
+}
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  orgId              String
+  org                Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plan               SubscriptionPlan   @default(FREE)
+  status             SubscriptionStatus @default(TRIALING)
+  renewAt            DateTime?
+  projectsUsed       Int                @default(0)
+  documentsUsed      Int                @default(0)
+  complianceRunsUsed Int                @default(0)
+  chatMessagesUsed   Int                @default(0)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@unique([orgId])
+  @@index([status, renewAt])
+}
