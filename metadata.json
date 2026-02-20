@@ -1,0 +1,5 @@
+{
+  "name": "CNSC Expert AI",
+  "description": "A comprehensive regulatory expert system for the Canadian Nuclear Safety Commission, featuring AI Q&A, compliance monitoring, and advanced RAG administration.",
+  "requestFramePermissions": []
+}
